@@ -1,178 +1,144 @@
-(ns cljs.main
-  (:refer-clojure :exclude [val empty remove find])
-  (:require [cljs.helpers :as helper]
+(ns jida.client.main
+  (:require [cljs.core.async :as async :refer [>! <! alts! chan sliding-buffer put! close!]]
+            [cljs.reader :as reader]
             [clojure.browser.repl :as repl]
-            [domina :as d]
-            [domina.events :as evt]
-            [fetch.remotes :as remotes]
+            [clojure.string :as string]
+            [dommy.core :as dommy]
             [goog.Uri :as uri]
             [goog.dom.selection :as selection]
-            [cljs.reader :as reader]
-            )
-
-  (:use-macros [crate.def-macros :only [defpartial]])
-  (:require-macros [fetch.macros :as fm]))
-
-(defn development? []
-  (= document/domain "localhost"))
-
-(def host (str "http://" document/domain))
-
-(def parsed-uri
-  (goog.Uri. (-> (.-location js/window) (.-href) )))
-
-(def initial-query-id
-  (.getParameterValue parsed-uri "query-id"))
-
-(defpartial results-item [fields]
-            [:tr (map #(vector :td %) fields)])
-
-(defpartial results-items [items headers]
-            [:div.results
-             [:p (count items) " returned."]
-            [:table.table.table-bordered.table-striped
-             [:thead
-              [:tr (map #(vector :th %) headers)]]
-             [:tbody (map results-item items)]]])
-
-(defpartial results-error [{msg :error}]
-            [:div.results.alert.alert-error msg])
-
-(defpartial repo [[repo]]
-            [:a {:href repo :target "_blank"} repo])
-
-(defpartial repos [repos]
-            [:div (interpose ", " (map repo repos))])
-
-(defn query-link [id]
-  (str "/?query-id=" id))
-
-(defn friendly-title [title]
-  (if (empty? title) "untitled" title))
-
-(defn friendly-description [description]
-  (if (empty? description) "" (str ": " description)))
-
-(defpartial query-history-item [{:keys [title description _id]}]
-            [:li
-             [:a {:href (query-link _id)} (friendly-title title)]
-             (friendly-description description)
-             ])
-
-(defpartial query-history [items]
-            [:ul (map query-history-item items)])
-
-(defn safe-read [s]
-  (binding [reader/*read-eval* false]
-    (reader/read-string s)))
-
-(defn extract-find-args [query]
-  (let [q (safe-read query)]
-    (map str
-         (take-while #(not (keyword? %))
-                     (drop 1 (drop-while #(not (= :find %)) q))))))
-
-(defn display-results [results query]
-  (d/log query (extract-find-args query))
-  (d/set-html! (d/by-id "results")
-               (if (:error results)
-                 (results-error results)
-                 (results-items results (extract-find-args query))))
-  (helper/show (d/by-id "results")))
+            [jida.client.api :as api]
+            [jida.client.parens :as parens]
+            [jida.client.ui :as ui]
+            [jida.client.utils :as utils]
+            [jida.client.views :as views])
+  (:require-macros [cljs.core.async.macros :as am :refer [go alt!]]
+                   [cljs.core.match.macros :refer [match]])
+  (:use-macros [dommy.macros :only [node sel sel1]]))
 
 
-(defn select-character [text-area offset]
-  (selection/setStart text-area offset)
-  (selection/setEnd text-area (inc offset)))
+;;******************************************************************************
+;;  Logging
+;;******************************************************************************
 
-(defn display-error [message]
-  (helper/show (d/by-id "error-messages"))
-  (d/set-html! (d/by-id "error-messages") message))
+(defn log-node [message & [data]]
+  [:li.log-message message
+   (when data
+     [:span.toggle ": " [:span.data (pr-str data)]])])
 
-(defn submit-query [_]
-  (let [query (d/value (d/by-id "query-text"))
-        [valid-query? error-offsets] (helper/balanced-parens? query)]
-    (if valid-query?
-      (do
-        (helper/show (d/by-id "loader"))
-        (fm/remote
-          (query-codeq query) [results]
-          (display-results results query)
-          (helper/hide (d/by-id "loader"))
-          (helper/hide (d/by-id "error-messages"))))
-      (do
-           (display-error (str "Your parens at offet(s) " (clojure.string/join ", " error-offsets) " aren't properly balanced, please check again"))
-        (select-character (d/by-id "query-text") (first error-offsets))
-        (helper/hide (d/by-id "loader"))))))
+(def counter (atom 0))
 
-(defn queue-import [_]
-  (let [url (d/value (d/by-id "repo-address"))]
-    (if (helper/valid-git-url? url)
-      (do
-        (helper/show (d/by-id "import-status"))
-        (d/set-text! (d/by-id "import-status") "Queueing import")
-        (fm/remote
-         (queue-import url) [_]
-         (d/set-text! (d/by-id "import-status")
-                      (str "Importing " url "... you may not see it right away."))))
-      ; Invalid url
-      (display-error "That looks like an invalid Git url. It must start with 'https://'"))))
+(def max-log-length 45)
 
-(defn set-query-field [query]
-  (d/set-text! (d/by-id "query-text") query))
+(defn log! [message & [data]]
+  (swap! counter inc)
+  (let [el (sel1 :#log)
+        log-el (node (log-node (str @counter ". " message) data))]
+    (dommy/prepend! el log-el))
+  ; Limit to the last n 
+  (let [log-nodes (sel [:#log :li])]
+    (doseq [node (drop max-log-length log-nodes)]
+      (dommy/clear! node)
+      (dommy/remove! node))))
 
-(defn set-query-title! [title]
-  (d/set-text! (d/by-id "query-title") title))
+(defn enable-logging! [log-ch]
+  (when (sel1 :#log-container)))
 
-(defn set-query-description! [description]
-  (d/set-text! (d/by-id "description") description))
+;;******************************************************************************
+;;  Main UI Loop
+;;******************************************************************************
 
-(defn check-save-button []
-  (d/log "Checking the save button")
-  (let [query-node (d/by-id "query-text")
-        query-value (d/value query-node)]
-    (if (= (count query-value) 0)
-      (d/set-attr! (d/by-id "query-save") :disabled true)
-      (d/remove-attr! (d/by-id "query-save") :disabled))))
+(defn check-query-parens! [target data & [select?]]
+  (utils/log "Here? Select? " select?)
+  (let [[balanced? errors] (parens/balanced-parens? data)]
+    (if balanced?
+      (ui/clear-paren-errors! target)
+      (ui/mark-paren-errors! target errors select?))
+    (utils/log "Now Here?")
+    balanced?))
 
-(defn update-query-history! []
-  (fm/letrem [history (recent-queries)]
-             (d/log history)
-             (d/set-html! (d/by-id "query-history") (query-history history))))
+(defn check-valid-git-url! [target url]
+  (if (utils/valid-git-url? url)
+    (ui/clear-repo-url-message-status! target)
+    (ui/set-repo-url-message-status! target "This is not a valid (public) git url"))
+  (utils/valid-git-url? url))
 
-(defn save-query! []
-  (let [title (js/prompt "Query title")
-        description (js/prompt "Describe the query")
-        query-value (d/value (d/by-id "query-text"))]
-    (fm/letrem [result (save-query {:query query-value :description description :title title})]
-               (update-query-history!)
-               result)))
+(defn main [target controls-ch data-ch log-ch stop-ch]
+  (ui/build! target)
+  (ui/ui->chans! target controls-ch)
+  (ui/select! :query)
+  (go (loop []
+        (alt!
+         stop-ch ([v]
+                    (utils/log "Got stop chan, killing: " (pr-str v))
+                    (utils/log "Destroying ui target: " target)
+                    (ui/destroy! target))
+         controls-ch ([v] (let [[message data] v]
+                            (utils/log "controls start: " message ", " v)
+                            (match message
+                                   :query-selected (ui/select! :query)
+                                   :repos-selected (ui/select! :repos)
+                                   :info-selected  (ui/select! :info)
+                                   :user-query-updated  (check-query-parens! target data false)
+                                   :query-save     (when (check-query-parens! target data true)
+                                                     (api/save-query! data nil nil))
+                                   :query-submit   (when (check-query-parens! target data true)
+                                                     (api/run-query! data))
+                                   :import-repo    (when (check-valid-git-url! target data)
+                                                     (ui/set-repo-url-message-status! target (str "Importing " data "..."))
+                                                     (api/import-repo! data))
+                                   (utils/log "Unrecognized control message" ))
+                            (utils/log "end")
+                            (recur)))
+         data-ch ([v]
+                    (let [[message data] v]
+                      (utils/log "data start: " message ", " data)
+                      (match message
+                             :query-updated (ui/update-query! target data)
+                             :query-history-updated (ui/update-query-history! target data)
+                             :available-repos-updated (ui/update-available-repos! target data)
+                             :results-updated (do (utils/log "Ok, results updated")
+                                                  (let [[_ results query] v]
+                                                    (utils/log "Results: " results)
+                                                    (utils/log "Query: " query)
+                                                    (ui/display-results! target results query)))
+                             :else (utils/log "Unrecognized data message"))
+                      (utils/log "Data channel: " v)
+                      (recur)))
+         log-ch ([[message data]]
+                   (log! message data)
+                   (recur))))))
 
-(defn ^:export setup []
-  (fm/remote
-   (query-codeq "[:find ?repo-names :where [?repos :repo/uri ?repo-names]]") [result]
-   (d/set-html! (d/by-id "available-repos")
-                (repos result)))
+(def controls-ch (chan))
+(def log-ch (chan))
+(def main-stop-ch (chan))
+(def data-ch (chan))
 
-  (evt/listen! (d/by-id "query-submit") :click submit-query)
-  (evt/listen! (d/by-id "query-save") :click save-query!)
-  (evt/listen! (d/by-id "import-repo-btn") :click queue-import)
-  (evt/listen! (d/by-id "query-text") :keypress check-save-button)
-  (evt/listen! (d/by-id "query-text") :focus check-save-button)
-  (evt/listen! (d/by-id "query-text") :blur check-save-button)
+(comment
+  (main :#wrapper controls-ch data-ch log-ch main-stop-ch)
+  (go (>! main-stop-ch "Please stop"))
+  (go (>! data-ch [:results-updated
+                   [["sean" 28] ["marissa" 24] ["diego" 42]]
+                   "[:find ?repo-names ?age :where [?repos :repo/uri ?repo-names]]"]))
+  (go (>! data-ch [:results-updated
+                   {:error true
+                    :message "Display an error"}
+                   "[:find ?repo-names ?age :where [?repos :repo/uri ?repo-names]]"]))
+  (go (>! data-ch [:query-updated "Please stop SSSOOO NICE!"]))
+  (go (>! data-ch [:available-repos-updated ["Please stop SSSOOO NICE!"  "And me too!"]]))
+  (go (>! data-ch [:query-history-updated [{:title "Example query" :description "Some description for you" :_id :abc123}
+                                           {:title "Example query" :description "Some description for you" :_id :abc123}
+                                           {:title "Example query" :description "Some description for you" :_id :abc123}
+                                           {:title "Example query" :description "Some SDFA for you" :_id :abc123}]]))
+  (go (>! log-ch (<! controls-ch)))
+  (go (>! log-ch ["Log this!" {:place "holder"}])))
 
-  (when initial-query-id
-    (d/log "Loading existing query for " initial-query-id)
-    (fm/letrem [{:keys [title description query]} (get-query initial-query-id)]
-               (d/log initial-query-id query)
-               (d/log query)
-               (set-query-field query)
-               (set-query-description! (friendly-description description))
-               (set-query-title! (friendly-title title))))
+(defn ^:export setup! []
+  ;; TODO: Load example query
+  ;; TODO: Retrieve given query and run it, displaying the results
+  (when utils/initial-query-id
+    (utils/log "Loading existing query for " utils/initial-query-id))
 
-  (update-query-history!)
+  ;(ui/update-query-history!)
+  (main :#wrapper controls-ch data-ch log-ch main-stop-ch))
 
-  (comment (when (development?)
-    (repl/connect (str host ":9000/repl")))))
-
-(set! (.-onload js/window) setup)
+(set! (.-onload js/window) setup!)

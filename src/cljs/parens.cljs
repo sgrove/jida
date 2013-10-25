@@ -1,25 +1,4 @@
-(ns cljs.helpers
-  (:require [domina :as d]))
-
-(declare paren? paren-type acceptable-paren?)
-
-(defn show [node-seq]
-  "Sets the display style attr of a node-seq to block (visible)"
-  (d/set-style! node-seq "display" "block"))
-
-(defn hide [node-seq]
-  "Sets the display style attr of a node-seq to none (invisible)"
-  (d/set-style! node-seq "display" "none"))
-
-(defn visible? [node-seq]
-  (let [display (d/style node-seq "display")]
-    (when (not (= display "none")) true)))
-
-(defn toggle [node-seq]
-  "Toggles the visibility of a node-seq using Domina"
-  (if (visible? node-seq)
-    (hide node-seq)
-    (show node-seq)))
+(ns jida.client.parens)
 
 ; Paren-matching tools
 (def parens [ "{" "[" "(" 
@@ -31,6 +10,22 @@
 (def pairs (apply zipmap (partition 3 parens)))
 (def opening-parens (first (partition 3 parens)))
 (def closing-parens (last (partition 3 parens)))
+
+(defn paren? [char]
+  "Returns whether a character is one of the following: ({[]})"
+  (some #{char} parens))
+
+(defn paren-type [char]
+  "Returns whether a character is an :opening, :closing paren, or nil (not any paren)"
+  (when (paren? char)
+    (if (some #{char} opening-parens)
+      :opening
+      :closing)))
+
+(defn acceptable-paren? [stack new]
+  "Given a vector STACK of previous *open* [index paren]'s, return whether the new paren is acceptable"
+  (= (pairs (last (last stack)))
+     new))
 
 (defn balanced-parens? [query]
   "Given a query string, return whether the parans are balanced. Returns a vector, first value is bool balanced, second is list of offsets of unclosed parens"
@@ -54,7 +49,7 @@
         ; Opening parens are always acceptable, just add to the stack and recur
         (cond (= :opening type)
               (recur (rest query) (concat stack [[index char]]) error-offsets (inc index))
-                                        ; If it's a closing paren, check the type and see if it's allows
+              ; If it's a closing paren, check the type and see if it's allows
               (= :closing type)
               (if (acceptable-paren? stack char)
                 ; If it's an acceptable closing-paren, pop the last
@@ -66,26 +61,3 @@
               ; It's not a paren character, just recur like normal
               :else
               (recur (rest query) stack error-offsets (inc index)))))))
-
-
-(defn paren-type [char]
-  "Returns whether a character is an :opening, :closing paren, or nil (not any paren)"
-  (when (paren? char)
-    (if (some #{char} opening-parens)
-      :opening
-      :closing)))
-
-(defn paren? [char]
-  "Returns whether a character is one of the following: ({[]})"
-  (some #{char} parens))
-
-(defn acceptable-paren? [stack new]
-  "Given a vector STACK of previous *open* [index paren]'s, return whether the new paren is acceptable"
-  (= (pairs (last (last stack)))
-     new))
-
-(defn https-url? [url]
-  (= (subs url 0 8) "https://"))
-
-(defn valid-git-url? [url]
-  (https-url? url))

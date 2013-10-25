@@ -1,8 +1,8 @@
-(ns cljs.test
-  (:require [domina.css :as css]))
+(ns jida.client.test
+  (:use-macros [dommy.macros :only [node sel sel1]]))
 
 (defn testfn []
-  (css/sel ".test"))
+  (sel :.test))
 
 (defn testfn2 []
-  (css/sel ".hello"))
+  (sel :.hello))

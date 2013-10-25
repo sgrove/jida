@@ -27,7 +27,6 @@ body {
 }
 
 #results {
-  display: none;
   margin-top: 7px;
 }
 
@@ -37,7 +36,6 @@ body {
 }
 
 #import-status {
-  display: none;
 }
 
 #query-save {
