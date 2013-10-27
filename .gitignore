@@ -8,3 +8,5 @@ target/
 out/
 .lein-cljsbuild-repl/
 .repl
+/.env
+/.lein-*
