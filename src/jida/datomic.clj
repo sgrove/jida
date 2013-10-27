@@ -1,5 +1,6 @@
 (ns jida.datomic
-  (:require [datomic.api :as d]))
+  (:require [clojure.tools.reader.edn :as edn2]
+            [datomic.api :as d]))
 
 (def db-name
   (or (System/getenv "DATOMIC_DB") "git"))
@@ -8,9 +9,11 @@
   (or (System/getenv "DATOMIC_URI")
       (str "datomic:free://localhost:4334/" db-name)))
 
-(defn connect []
+(defn connect! [uri]
   (println "Connecting to uri: " uri)
   (d/connect uri))
+
+(def connection (connect! uri))
 
 ; Example rules
 (def rules
@@ -37,7 +40,7 @@
 ;               (?c :commit/authoredAt ?date)])
 ;          (d/db conn) rules "clojure.core/+")
 
-(defn query [q conn]
+(defn query [q & [conn]]
   (println q)
   (println (count q))
   (apply hash-set (d/q q (d/db conn) rules)))

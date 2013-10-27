@@ -6,7 +6,7 @@
             [dommy.core :as dommy]
             [goog.Uri :as uri]
             [goog.dom.selection :as selection]
-            [jida.client.api :as api]
+            [jida.client.api.channels :as api]
             [jida.client.parens :as parens]
             [jida.client.ui :as ui]
             [jida.client.utils :as utils]
@@ -62,47 +62,107 @@
     (ui/set-repo-url-message-status! target "This is not a valid (public) git url"))
   (utils/valid-git-url? url))
 
+(defn show-status-for! [target seconds message]
+  (go (ui/set-status-message! target message)
+      (<! (async/timeout (* 1000 seconds)))
+      (ui/clear-status-message! target)))
+
+; TODO: Add a universal error queueing function
+(defn show-error-for! [target seconds message]
+  (go (ui/set-error! target message)
+      (<! (async/timeout (* 1000 seconds)))
+      (ui/clear-error! target)))
+
+(defn update-query-history! [target data-ch]
+  (go (let [update-history-ch (chan)]
+        (api/fetch-recent-saved-queries 5 update-history-ch)
+        (let [[message [data response]] (<! update-history-ch)]
+          (utils/log "Fetch history response: " response)
+          (condp = message
+            :fetch-recent-saved-queries-succeeded (put! data-ch [:query-history-updated (get-in response [:recently-saved-queries])])
+            (show-error-for! target 5 "Error fetching recent query history"))))))
+
+(defn update-available-repos! [target data-ch]
+  (go (let [update-repos-ch (chan)]
+        (api/fetch-available-repos update-repos-ch)
+        (let [[message [data response]] (<! update-repos-ch)]
+          (utils/log "Fetch available repos response: " response)
+          (utils/log "Message:" message)
+          (utils/log "Data:" data)
+          (if (= message :fetch-available-repos-succeeded)
+            (put! data-ch [:available-repos-updated (get-in response [:repos])])
+            (show-error-for! target 5 "Error fetching available repos"))))))
+
 (defn main [target controls-ch data-ch log-ch stop-ch]
   (ui/build! target)
   (ui/ui->chans! target controls-ch)
   (ui/select! :query)
+  (update-query-history! target data-ch)
+  (update-available-repos! target data-ch)
+  (when utils/initial-query-id
+    (let [initial-query-ch (chan)]
+      (go (api/find-query utils/initial-query-id initial-query-ch)
+          (let [[message [data response]] (<! initial-query-ch)]
+            (if (= message :find-query-succeeded)
+              (put! data-ch [:query-updated (:query response)])
+              (show-error-for! target 5 (str "Error retrieving query " utils/initial-query-id)))))))
   (go (loop []
         (alt!
          stop-ch ([v]
-                    (utils/log "Got stop chan, killing: " (pr-str v))
-                    (utils/log "Destroying ui target: " target)
                     (ui/destroy! target))
          controls-ch ([v] (let [[message data] v]
-                            (utils/log "controls start: " message ", " v)
                             (match message
                                    :query-selected (ui/select! :query)
                                    :repos-selected (ui/select! :repos)
                                    :info-selected  (ui/select! :info)
                                    :user-query-updated  (check-query-parens! target data false)
                                    :query-save     (when (check-query-parens! target data true)
-                                                     (api/save-query! data nil nil))
+                                                     (ui/enable-spinner! target)
+                                                     (let [save-ch (chan)
+                                                           title (js/prompt "Query title")
+                                                           description (js/prompt "Query description")
+                                                           ]
+                                                       (api/save-query! title description data save-ch)
+                                                       (let [[message [data response]] (<! save-ch)]
+                                                         (ui/disable-spinner! target)
+                                                         (show-status-for! 5 target "Query saved!")
+                                                         (condp = message
+                                                           :save-query-succeeded (update-query-history! target data-ch)
+                                                           
+                                                           (do
+                                                             (ui/set-error! target (str "There was an error saving your query: " (get-in response [:response :message]))))))))
                                    :query-submit   (when (check-query-parens! target data true)
-                                                     (api/run-query! data))
+                                                     (ui/enable-spinner! target)
+                                                     (let [run-ch (chan)]
+                                                       (api/run-query! data run-ch)
+                                                       (let [[message [data response]] (<! run-ch)]
+                                                         (ui/disable-spinner! target)
+                                                         (condp = message
+                                                           :run-query-succeeded (put! data-ch [:results-updated
+                                                                                               response
+                                                                                               (:query data)])
+                                                           (do
+                                                             (ui/clear-results! target)
+                                                             (ui/set-error! target "There was an error running your query."))))))
                                    :import-repo    (when (check-valid-git-url! target data)
-                                                     (ui/set-repo-url-message-status! target (str "Importing " data "..."))
-                                                     (api/import-repo! data))
-                                   (utils/log "Unrecognized control message" ))
-                            (utils/log "end")
+                                                     (ui/set-repo-url-message-status! target (str "Queueing " data " for import..."))
+                                                     (let [import-ch (chan)]
+                                                       (api/import-repo! data import-ch)
+                                                       (let [[message [data response]] (<! import-ch)]
+                                                         (condp = message
+                                                           :import-repo-succeeded (ui/set-repo-url-message-status! target (str (:repo-address data) " successfully queued for import"))
+                                                           (ui/set-repo-url-message-status! target (str "Error queueing " (:repo-address data) " for import")))))))
                             (recur)))
          data-ch ([v]
                     (let [[message data] v]
-                      (utils/log "data start: " message ", " data)
-                      (match message
+                      (utils/log "DAta ch: " message ", " data ", " v)
+                      (condp = message
                              :query-updated (ui/update-query! target data)
                              :query-history-updated (ui/update-query-history! target data)
                              :available-repos-updated (ui/update-available-repos! target data)
-                             :results-updated (do (utils/log "Ok, results updated")
-                                                  (let [[_ results query] v]
-                                                    (utils/log "Results: " results)
-                                                    (utils/log "Query: " query)
-                                                    (ui/display-results! target results query)))
-                             :else (utils/log "Unrecognized data message"))
-                      (utils/log "Data channel: " v)
+                             :results-updated (do (let [[_ results query] v]
+                                                     (ui/display-results! target results query)))
+                              (utils/log "Unrecognized data message"))
                       (recur)))
          log-ch ([[message data]]
                    (log! message data)
@@ -116,6 +176,10 @@
 (comment
   (main :#wrapper controls-ch data-ch log-ch main-stop-ch)
   (go (>! main-stop-ch "Please stop"))
+  (ui/update-query! :#wrapper {:title "Test" :description "D" :query_body "ABC"})
+  (put! data-ch [:results-updated
+                 (vec (repeatedly (rand-int 15) #(rand-nth [["sean" (rand-int 99)] ["marissa" (rand-int 99)] ["diego" (rand-int 99)]])))
+                 "[:find ?repo-names ?age :where [?repos :repo/uri ?repo-names]]"])
   (go (>! data-ch [:results-updated
                    [["sean" 28] ["marissa" 24] ["diego" 42]]
                    "[:find ?repo-names ?age :where [?repos :repo/uri ?repo-names]]"]))
@@ -133,12 +197,6 @@
   (go (>! log-ch ["Log this!" {:place "holder"}])))
 
 (defn ^:export setup! []
-  ;; TODO: Load example query
-  ;; TODO: Retrieve given query and run it, displaying the results
-  (when utils/initial-query-id
-    (utils/log "Loading existing query for " utils/initial-query-id))
-
-  ;(ui/update-query-history!)
   (main :#wrapper controls-ch data-ch log-ch main-stop-ch))
 
 (set! (.-onload js/window) setup!)

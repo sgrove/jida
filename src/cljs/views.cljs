@@ -1,5 +1,6 @@
 (ns jida.client.views
-  (:require [dommy.core :as dommy])
+  (:require [clojure.string :as string]
+            [dommy.core :as dommy])
   (:use-macros [dommy.macros :only [node sel sel1]]))
 
 (def query-content*
@@ -8,15 +9,16 @@
     [:div.span8
      [:p
       [:strong#query-title]
-      [:span#description]]
+      [:span#query-description]]
      [:textarea#query-text
       {:rows 3
        :placeholder "Your query"}
       "[:find ?repo-names :where [?repos :repo/uri ?repo-names]]"]
      [:div.controls
+      [:img#loader {:style "display:none;" :src "https://www.zenboxapp.com/assets/loading.gif"}]
       [:input#query-save.btn.btn-large.btn-safe {:value "save" :type "submit"}]
       [:input#query-submit.btn.btn-large.btn-primary {:value "run" :type "submit"}]
-      [:img#loader {:style "display:none;" :src "https://www.zenboxapp.com/assets/loading.gif"}]
+      [:div#status-messages.status {:style "display:none;"}]
       [:div#error-messages.alert {:style "display:none;"}]]]
     [:div.span3.sidebar
      [:div
@@ -32,7 +34,8 @@
     [:p "Available repos: "
      [:div#available-repos]]]
    [:div
-    [:label "Add your repo"]
+    [:label "Add your repo"
+     [:strong "THIS DOESN'T WORK RIGHT NOW (NOOP TEST)"]]
     [:input#repo-address.input-xlarge
      {:type "text"
       :value "https://github.com/clojure/clojure.git"}]
@@ -101,7 +104,11 @@
   (node (results-error* arg)))
 
 (defn repo* [repo]
-  [:a {:href repo :target "_blank"} repo])
+  {:pre [(> (count repo) 4)]}
+  (let [repo (if (= "git:" (subs repo 0 4))
+               (str "https:" (subs repo 4))
+               repo)]
+    [:a {:href repo :target "_blank"} repo]))
 
 (defn repos* [repos]
   [:div (interpose ", " (map repo* repos))])
@@ -116,13 +123,12 @@
   (if (empty? description) "" (str ": " description)))
 
 (defn query-link [id]
-  (str "/?query-id=" id))
+  (str "/?query-uuid=" id))
 
 (defn query-history-item* [item]
-  (println "Item: " item)
-  (let [{:keys [title description _id]} item]
+  (let [{:keys [title description uuid]} item]
     [:li
-     [:a {:href (query-link _id)
+     [:a {:href (query-link uuid)
           :target "_blank"} (friendly-title title)]
      (friendly-description description)]))
 

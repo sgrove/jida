@@ -1,16 +1,15 @@
 (ns jida.server
   (:use [compojure.core]
         [ring.adapter.jetty])
-  (:require [cemerick.piggieback]
-            [cljs.repl.browser]
-            [jida.datomic :as jida]
-            [jida.queue :as jiqu]
-            [jida.queries :as queries]
-            [jida.routes.api :as api-routes]
-            [jida.routes.content :as content-routes]
-            [compojure.handler :as handler]
-            [compojure.route :as route]
-            [compojure.response :as response]))
+   (:require [jida.datomic :as jida]
+             [jida.queue :as jiqu]
+             [jida.queries :as queries]
+             [jida.routes.api :as api-routes]
+             [jida.routes.content :as content-routes]
+             [compojure.handler :as handler]
+             [compojure.route :as route]
+             [compojure.response :as response])
+  (:gen-class))
 
 ; Ideas
 ; 1. Function-specific queries: explore functions
@@ -54,22 +53,21 @@
   (swap! servers assoc name (create-server! (or port 3000) (or background? true) ssl?)))
 
 (defn -main [& args]
-  (reset! conn (jida/connect))
-  (start-named! :command-line (or (when-let [port (first args)] (Integer/parseInt port)) 3000) false false))
+  ;(reset! conn (jida/connect))
+  (start-named! :command-line (or (when-let [port (first args)] (Integer/parseInt port)) 3000) false false)
+  ;(println "What?")
+  )
 
 ;;******************************************************************************
 ;;  ClojureScript Helpers
 ;;******************************************************************************
+;; (comment
+;;   (def repl-env (reset! cemerick.austin.repls/browser-repl-env
+;;                         (cemerick.austin/repl-env)))
 
-(defn start-cljs-repl []
-   (cemerick.piggieback/cljs-repl
-  :repl-env (doto (cljs.repl.browser/repl-env :port 9000)
-              cljs.repl/-setup)))
+;;   (cemerick.austin.repls/cljs-repl repl-env)
 
-(def repl-env (reset! cemerick.austin.repls/browser-repl-env
-                      (cemerick.austin/repl-env)))
-
-;(start-named! :auto-start 3000 true false)
+;;   (start-named! :auto-start 3000 true false))
 
 ;; (defremote query-codeq [q]
 ;;   (println "Received query for" q)

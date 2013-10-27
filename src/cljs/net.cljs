@@ -6,6 +6,8 @@
 
 ; TODO: Add cljs-ajax?
 
+
+
 (defn submit-query [_]
   (let [;query (dommy/value (sel1 :#query-text))
         ;[valid-query? error-offsets] (parens/balanced-parens? query)

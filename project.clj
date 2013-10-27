@@ -12,11 +12,11 @@
             [org.timmc/nephila "0.2.0"]]
   :description "Hosted Community-Oriented Codeq"
   :dependencies [[cheshire "5.2.0"]
+                 [cljs-ajax "0.2.1"]
                  [compojure "1.1.5"]
                  [com.cemerick/clojurescript.test "0.1.0"]
                  [hiccup "1.0.4"]
                  [korma "0.3.0-RC4"]
-                 [korma.incubator "0.1.0-SNAPSHOT"]
                  [org.clojure/clojure "1.5.1"]
                  [org.clojure/clojurescript "0.0-1934"]
                  [org.clojure/core.async "0.1.242.0-44b1e3-alpha"]
@@ -47,6 +47,7 @@
                  :output-to "resources/public/js/bin/main.js",
                  :optimizations :simple}}]}
   :repl-options {:init-ns jida.client.main}
-  :profiles {:dev {:plugins []}}
+  :profiles {:dev {:plugins []}
+             :uberjar {:aot :all}}
   :ring {:handler jida.server/app}
   :main jida.server)

@@ -26,7 +26,6 @@
 
 (defn display-results! [parent results query]
   {:pre [(or (vector? results) (map? results))]}
-  (utils/log query (extract-find-args query))
   (let [results-el (sel1 [parent :#results])]
     (dommy/clear! results-el)
     (-> results-el
@@ -34,6 +33,10 @@
                         (views/results-error results)
                         (views/results-items results (extract-find-args query))))
      (dommy/show!))))
+
+(defn clear-results! [parent]
+  (let [results-el (sel1 [parent :#results])]
+    (dommy/clear! results-el)))
 
 (defn display-error! [message]
   (-> (sel1 :#error-messages)
@@ -64,8 +67,13 @@
     (dommy/append! history-el content)))
 
 (defn update-query! [parent query]
+  (utils/log "Query: " query)
+  (-> (sel1 [parent :#query-title])
+      (dommy/set-text! (:title query)))
+  (-> (sel1 [parent :#query-description])
+      (dommy/set-text! (:description query)))
   (-> (sel1 [parent :#query-text])
-      (dommy/set-value! query)))
+      (dommy/set-value! (:query_body query))))
 
 (defn update-available-repos! [parent repos]
   (let [repos-el (sel1 [parent :#available-repos])
@@ -84,10 +92,11 @@
 
 (defn tabs->chans! [parent tab-ids target-ch]
   (doseq [tab-id tab-ids]
-    (dommy/listen! (sel1 [parent (str "#" (name tab-id))]) :click (fn [data]
-                                                           (utils/log "Got an event: " :click " on target " tab-id)
-                                                           (utils/relay target-ch (keyword (str (name tab-id) "-selected")) data)
-                                                          false))))
+    (dommy/listen! (sel1 [parent (str "#" (name tab-id))]) :click (fn [event]
+                                                                    (.preventDefault event)
+                                                                    (utils/log "Got an event: " :click " on target " tab-id)
+                                                                    (utils/relay target-ch (keyword (str (name tab-id) "-selected")) event)
+                                                                    false))))
 
 (defn repo->chans! [parent target-ch]
   (let [repo-import-input (sel1 [parent :#repo-address])
@@ -116,28 +125,40 @@
       (dommy/listen! text-el event-type (fn [event]
                                           (utils/relay target-ch :user-query-updated (.-value text-el)))))))
 
+(defn set-error! [target error-message]
+  (-> (sel1 [target :#error-messages])
+      (dommy/set-text! error-message)
+      (dommy/show!)))
+
+(defn clear-error! [target]
+  (-> (sel1 [target :#error-messages])
+      (dommy/hide!)))
+
 (defn mark-paren-errors! [target errors & [select-error?]]
   (utils/log "Select error? " select-error?)
   (when select-error?
     (-> (sel1 [target :#query-text])
         (select-character (first errors))))
-  (-> (sel1 [target :#error-messages])
-      (dommy/set-text! (str "Unbalanced parens at positions" (string/join ", " errors)))
-      (dommy/show!)))
+  (set-error! target (str "Unbalanced parens at positions" (string/join ", " errors))))
 
 (defn clear-paren-errors! [target]
-  (-> (sel1 [target :#error-messages])
-      (dommy/hide!)))
+  (clear-error! target))
 
 (defn set-repo-url-message-status! [target error]
   (-> (sel1 [target :#import-status])
       (dommy/set-text! error)
       (dommy/show!)))
 
-(defn clear-repo-url-message-status! [target error]
+(defn clear-repo-url-message-status! [target]
   (-> (sel1 [target :#import-status])
       (dommy/set-text! "")
       (dommy/hide!)))
+
+(defn enable-spinner! [target]
+  (dommy/show! (sel1 [target :#loader])))
+
+(defn disable-spinner! [target]
+  (dommy/hide! (sel1 [target :#loader])))
 
 (defn build! [target]
   (-> (sel1 target)
@@ -146,3 +167,12 @@
 (defn destroy! [target]
   (-> (sel1 target)
       (dommy/clear!)))
+
+(defn set-status-message! [target message]
+  (-> (sel1 [target :#status-messages])
+      (dommy/set-text! message)
+      (dommy/show!)))
+
+(defn clear-status-message! [target]
+  (-> (sel1 [target :#status-messages])
+      (dommy/hide!)))

@@ -2,7 +2,6 @@
   (:use [compojure.core]
         [ring.adapter.jetty])
   (:require [jida.views.welcome :as welcome-views]
-            [compojure.handler :as handler]
             [compojure.route :as route]
             [compojure.response :as response]))
 

@@ -1,8 +1,7 @@
 (ns jida.client.utils
   (:require [cljs.core.async :as async :refer [>! <! alts! chan sliding-buffer put! close!]]
-            [goog.Uri])
-  (:require-macros [cljs.core.async.macros :as am :refer [go alt!]]
-                   [cljs.core.match.macros :refer [match]]))
+            [goog.Uri :as uri])
+  (:require-macros [cljs.core.async.macros :as am :refer [go alt!]]))
 
 (defn https-url? [url]
   (= (subs url 0 8) "https://"))
