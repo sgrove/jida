@@ -15,6 +15,7 @@
                  [cljs-ajax "0.2.1"]
                  [compojure "1.1.5"]
                  [com.cemerick/clojurescript.test "0.1.0"]
+                 [com.datomic/datomic-free "0.8.4218"]
                  [hiccup "1.0.4"]
                  [korma "0.3.0-RC4"]
                  [org.clojure/clojure "1.5.1"]
@@ -31,7 +32,7 @@
                  [ring/ring-core "1.2.0"]
                  [ring/ring-json "0.2.0"]
                  [ring/ring-jetty-adapter "1.2.0"]
-                 [com.datomic/datomic-free "0.8.4218"]]
+                 [sonian/carica "1.0.3"]]
   :cljsbuild {:builds
               [{:source-paths ["src/cljs"],
                 :id "dev",
@@ -48,7 +49,16 @@
                  :optimizations :simple}}]}
   :repl-options {:init-ns jida.client.main}
   :min-lein-version "2.0.0"
-  :profiles {:dev {:plugins []}
-             :uberjar {:aot :all}}
+  :profiles {:prod {:resource-paths ["config/prod"]}
+             :dev {:resource-paths ["config/dev"]
+                   :source-paths ["test"]
+                   :dependencies [[ring-mock "0.1.5"]]
+                   :plugins []}
+             :test{:resource-paths ["config/test"]
+                   :source-paths ["test"]
+                   :dependencies [[ring-mock "0.1.5"]]
+                   :plugins []}
+             :uberjar {:resource-paths ["config/prod"]
+                       :aot :all}}
   :ring {:handler jida.server/app}
   :main jida.server)

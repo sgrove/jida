@@ -1,5 +1,5 @@
 (ns jida.datomic
-  (:require [clojure.tools.reader.edn :as edn2]
+  (:require [clojure.tools.reader.edn :as edn]
             [datomic.api :as d]))
 
 (def db-name
@@ -13,7 +13,9 @@
   (println "Connecting to uri: " uri)
   (d/connect uri))
 
-(def connection (connect! uri))
+(def connection
+  ;(connect! uri)
+  )
 
 ; Example rules
 (def rules

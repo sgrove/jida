@@ -11,7 +11,9 @@
              [compojure.response :as response])
   (:gen-class))
 
-; Ideas
+;;******************************************************************************
+;;  Feature Ideas
+;;******************************************************************************
 ; 1. Function-specific queries: explore functions
 ;   a. Function history: Most frequent commit author ("Who changed this function most?")
 ;   b. Calculate code complexity for a function over time,
@@ -23,6 +25,11 @@
 ; 4. Import repos
 ; 5. Allow me to save/share/fork queries I think are useful
 ; 6. Related to 5, take queries from url so we can have pastie-like sharing
+
+
+;;******************************************************************************
+;;  Server Routes & Connections
+;;******************************************************************************
 
 (defonce conn (atom nil))
 
@@ -53,10 +60,8 @@
   (swap! servers assoc name (create-server! (or port 3000) (or background? true) ssl?)))
 
 (defn -main [& args]
-  ;(reset! conn (jida/connect))
-  (start-named! :command-line (or (when-let [port (first args)] (Integer/parseInt port)) 3000) false false)
-  ;(println "What?")
-  )
+  (reset! conn (jida/connect! jida/uri))
+  (start-named! :primary (or (when-let [port (first args)] (Integer/parseInt port)) 3000) false false))
 
 ;;******************************************************************************
 ;;  ClojureScript Helpers
@@ -64,18 +69,5 @@
 ;; (comment
 ;;   (def repl-env (reset! cemerick.austin.repls/browser-repl-env
 ;;                         (cemerick.austin/repl-env)))
-
 ;;   (cemerick.austin.repls/cljs-repl repl-env)
-
 ;;   (start-named! :auto-start 3000 true false))
-
-;; (defremote query-codeq [q]
-;;   (println "Received query for" q)
-;;   (let [result (try (jida/query q @conn)
-;;                  (catch Exception e {:error (str e)}))]
-;;     (println)
-;;     (println "Finished: " result)
-;;     result))
-
-;; (defremote queue-import [address]
-;;   (jiqu/queue-import address))

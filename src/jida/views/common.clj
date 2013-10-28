@@ -1,5 +1,6 @@
 (ns jida.views.common
-  (:require [cemerick.austin.repls :refer [browser-connected-repl-js]])
+  (:require [carica.core :as carica]
+            [cemerick.austin.repls :refer [browser-connected-repl-js]])
   (:use [hiccup.core :refer :all]))
 
 (defn layout [& content]
@@ -12,4 +13,5 @@
     [:div#wrapper.container
      content]
     [:script {:type "text/javascript" :src "/js/bin-debug/main.js"}]
-    [:script (browser-connected-repl-js)]]])
+    (when (not= :prod (carica/config :env-name))
+      [:script (browser-connected-repl-js)])]])
