@@ -1,6 +1,5 @@
 (defproject jida "0.1.1"
-  :plugins [[com.cemerick/austin "0.1.1"]
-            [hiccup-bridge "1.0.0-SNAPSHOT"]
+  :plugins [[hiccup-bridge "1.0.0-SNAPSHOT"]
             [lein-ancient "0.5.1"]
             [lein-bikeshed "0.1.3"]
             [lein-cljsbuild "0.3.4"]
@@ -53,7 +52,7 @@
              :dev {:resource-paths ["config/dev"]
                    :source-paths ["test"]
                    :dependencies [[ring-mock "0.1.5"]]
-                   :plugins []}
+                   :plugins [[com.cemerick/austin "0.1.1"]]}
              :test{:resource-paths ["config/test"]
                    :source-paths ["test"]
                    :dependencies [[ring-mock "0.1.5"]]
