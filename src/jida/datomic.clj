@@ -9,13 +9,14 @@
   (or (System/getenv "DATOMIC_URI")
       (str "datomic:free://localhost:4334/" db-name)))
 
-(defn connect! [uri]
-  (println "Connecting to uri: " uri)
-  (d/connect uri))
+(def connection (atom nil))
 
-(def connection
-  ;(connect! uri)
-  )
+(defn connect! [uri]
+  (or @connection
+      (do
+        (reset! connection (d/connect uri))
+        (println "Connecting to uri: " uri)
+        @connection)))
 
 ; Example rules
 (def rules
