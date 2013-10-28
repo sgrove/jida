@@ -2,6 +2,7 @@
   (:use [compojure.core]
         [ring.adapter.jetty])
    (:require [jida.datomic :as jida]
+             [jida.db :as db]
              [jida.queue :as jiqu]
              [jida.queries :as queries]
              [jida.routes.api :as api-routes]
@@ -61,6 +62,7 @@
 
 (defn -main [& args]
   (reset! conn (jida/connect! jida/uri))
+  (db/connect!)
   (start-named! :primary (or (when-let [port (first args)] (Integer/parseInt port)) 3000) false false))
 
 ;;******************************************************************************
