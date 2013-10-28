@@ -46,7 +46,6 @@
                 {:output-dir "resources/public/js/bin",
                  :output-to "resources/public/js/bin/main.js",
                  :optimizations :simple}}]}
-  :repl-options {:init-ns jida.client.main}
   :min-lein-version "2.0.0"
   :profiles {:prod {:resource-paths ["config/prod"]}
              :dev {:resource-paths ["config/dev"]
