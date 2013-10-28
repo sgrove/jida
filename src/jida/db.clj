@@ -5,39 +5,39 @@
             [clojure.tools.reader.edn :as edn]
             [korma.core :as korm]
             [korma.db :as db])
-   (:import (java.net URI)
-            (java.util.UUID)))
+  (:import (java.net URI)
+           (java.util.UUID)))
 
 (defn uri->db-spec [mode uri]
   (let [db-uri (java.net.URI. uri)]
     (merge {:db (last (string/split uri #"\/"))
             :host (.getHost db-uri)
             :port (.getPort db-uri)}
-           (when (= mode :prod)
-             {:ssl true
-              :sslfactory (when (= mode :dev) "org.postgresql.ssl.NonValidatingFactory")})
            (when-let [user-info (.getUserInfo db-uri)]
              (let [[user password] (string/split user-info #":")]
                {:user user
                 :password password})))))
 
 (defn mode []
-  (carica/config :env-name))
+  (if (= (System/getenv "production") "true") :prod :dev))
 
 (defn pg-db [mode uri]
   (db/postgres (uri->db-spec mode uri)))
 
-(def local-pg-string "postgres://localhost:15432/jida_dev")
-(def heroku-pg-string (System/getenv "DATABASE_URL"))
+(def local-pg-string
+  "postgres://localhost:15432/jida_dev")
+
+(def heroku-pg-string
+  (System/getenv "HEROKU_POSTGRESQL_PURPLE_URL"))
 
 (defn db-spec [mode]
-  (pg-db mode (or local-pg-string heroku-pg-string)))
+  (pg-db mode (if (= :prod mode) heroku-pg-string local-pg-string)))
 
 (defn connect! []
-  (db/defdb default (db/postgres (db-spec (mode)))))
+  (db/defdb default2 (db-spec (mode))))
 
-(defn create-queries-table []
-  (sql/with-connection db-spec
+(defn create-queries-table! []
+  (sql/with-connection (db-spec (mode))
     (sql/create-table
      :queries
      [:id "serial"]
@@ -62,5 +62,4 @@
 ;;  Initial entity declarations
 ;;******************************************************************************
 
-(korm/defentity queries
-  (korm/database default))
+(korm/defentity queries)
