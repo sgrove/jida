@@ -33,7 +33,7 @@
        :body (if query
                {:success true
                 :query query
-                :results (jida/query (edn/read-string (:query_body query)) jida/connection)}
+                :results (jida/query (edn/read-string (:query_body query)) @jida/connection)}
                {:success false
                 :message "No query with that uuid"})}))
   (GET "/queries/:uuid.json" [uuid]
@@ -45,7 +45,7 @@
   (GET "/query.json" [query]
     (println "Query body: " query)
     {:status 200
-     :body (jida/query (edn/read-string query) jida/connection)})
+     :body (jida/query (edn/read-string query) @jida/connection)})
   (POST "/query.json" [title description query]
     (let [[success message] (query/save {:title title
                                          :description description
@@ -60,7 +60,7 @@
        :body {:success success
               :message "Repo queued for import"}}))
   (GET "/repos/available.json" []
-    (let [repos (repo/available jida/connection)]
+    (let [repos (repo/available @jida/connection)]
       {:status 200
        :body {:repos repos}})))
 
