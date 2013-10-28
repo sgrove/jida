@@ -19,7 +19,7 @@
                 :password password})))))
 
 (defn mode []
-  (if (= (System/getenv "production") "true") :prod :dev))
+  (if (= (System/getenv "PRODUCTION") "true") :prod :dev))
 
 (defn pg-db [mode uri]
   (db/postgres (uri->db-spec mode uri)))
